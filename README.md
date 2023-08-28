@@ -2,4 +2,4 @@
 
 Case Western Reserve University - Categorical Data Analysis
 
-CWRU PQHS432 -> Summer 2023
+CWRU PQHS453 -> Summer 2023
