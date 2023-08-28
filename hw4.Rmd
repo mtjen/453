@@ -1,0 +1,183 @@
+---
+title: "453 HW4"
+author: "Max Tjen"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+```{r, message = FALSE}
+library(countreg)
+library(pscl)
+library(lmtest)
+library(dplyr)
+library(tidyverse)
+```
+
+# Question 16
+
+```{r, message=FALSE}
+data16 <- read_csv("/Users/mtjen/Desktop/453/hw4/dt.csv")
+```
+
+## Part A
+
+```{r}
+mod16a <- glm(ofp ~ hosp + numchron + gender + school + 
+                privins + health_excellent + health_poor,
+              family = poisson(link = "log"),
+              data = data16)
+
+mod16a
+```
+
+## Part B
+
+```{r, message=FALSE}
+# parameter effects
+effects <- round(100 * (exp(mod16a$coefficients) - 1)[2:8], 3)
+
+hospInt <- round(100 * (exp(confint(mod16a, parm = "hosp")) - 1), 3)
+numchronInt <- round(100 * (exp(confint(mod16a, parm = "numchron")) - 1), 3)
+genderInt <- round(100 * (exp(confint(mod16a, parm = "gender")) - 1), 3)
+schoolInt <- round(100 * (exp(confint(mod16a, parm = "school")) - 1), 3)
+privinsInt <- round(100 * (exp(confint(mod16a, parm = "privins")) - 1), 3)
+health_excellentInt <- round(100 * (exp(confint(mod16a, 
+                                          parm = "health_excellent")) - 1), 3)
+health_poorInt <- round(100 * (exp(confint(mod16a, 
+                                     parm = "health_poor")) - 1), 3)
+
+# parameter CI lower bound
+confLow <- c(hospInt[1], numchronInt[1], genderInt[1], 
+             schoolInt[1], privinsInt[1],
+             health_excellentInt[1], health_poorInt[1])
+
+# parameter CI lower bound
+confHigh <- c(hospInt[2], numchronInt[2], genderInt[2], 
+             schoolInt[2], privinsInt[2],
+             health_excellentInt[2], health_poorInt[2])
+
+results <- data.frame(matrix(nrow = 7))[,-1]
+results$parameter <- colnames(data16)[2:8]
+results$effect <- effects
+results$low <- confLow
+results$high <- confHigh
+results
+```
+
+We can see that there is a positive association between the number of physician office visits someone has with the number of hospital stays, number of chronic conditions, number of years of education, having private insurance, and being labeled as having poor health. There is a negative association between gender (being male) and being labeled as having excellent health. All of these variables' confidence intervals don't include 0, confirming their effect direction and relationship with one's number of physician office visits.
+
+## Part C
+
+```{r}
+# actual visits
+table(data16$ofp)[1]
+
+rootogram(mod16a)
+```
+
+We can see via the rootogram that the model heavily underfits 0 values for the number of physician office visits one has. This means that the model doesn't predict many 0 values despite the data having a decent amount. There may be many zero values in the data because people typically don't go for small issues and only go when it's really needed or required. As such, most people don't often go to the physician's office even if they probably should.
+
+## Part D
+
+```{r}
+zipMod16 <- zeroinfl(ofp ~ hosp + numchron + gender + school + 
+                       privins + health_excellent + health_poor | 1,
+                     dist = "poisson",
+                     data = data16)
+
+# parameter effects
+round(100 * (exp(zipMod16$coefficients$count) - 1)[2:8], 3)
+round(100 * (exp(confint(zipMod16)) - 1)[2:8,], 3)
+```
+
+We can see that similar to before, there is a positive association between the number of physician office visits someone has with the number of hospital stays, number of chronic conditions, number of years of education, having private insurance, and being labeled as having poor health. There is a negative association between gender (being male) and being labeled as having excellent health. The effect values for number of hospital stays, number of years of education, being labeled as having excellent health, and being labeled as having poor health are relatively similar to the poisson regression model. However, the effect values of number of chronic conditions, gender (being male), and having private insurance are noticeably different than before, although all still have the same effect direction. As before, the confidence intervals for all variables don't include 0, which means that we can be 95% confident about the true direction of effects.
+
+
+# Question 32
+
+```{r, message=FALSE}
+data32 <- read_csv("/Users/mtjen/Desktop/453/hw4/pregnancy.csv")
+```
+
+## Part A
+
+```{r}
+data32 <- data32 |>
+  mutate(smokef = factor(Smoke),
+         socialf = factor(Social))
+
+cTab <- xtabs(Count ~ HT + PU + smokef + socialf, 
+              data = data32)
+
+cTab
+
+fTab <- ftable(cTab, 
+               row.vars = c("smokef", "socialf"),
+               col.vars = c("HT", "PU"))
+
+fTab
+
+round(prop.table(fTab, margin = 1), 3)
+```
+
+The results of the first part is very difficult to interpret because of the output. From the f-table and proportion version, it looks like the values among sub-groups are very similar, which may mean that the explanatory variables may not have much of an effect on the two symptoms.
+
+## Part C
+
+```{r}
+mod32 <- glm(Count ~ (HT + PU + smokef + socialf)^3,
+             family = poisson(link = "log"),
+             data = data32)
+
+mod32
+
+# get p-value
+1 - pchisq(q = 12.68, df = 8)
+
+car::Anova(mod32)
+```
+
+The model's residual deviance is 12.68 with 8 residual degrees of freedom. To see whether the four variable interaction term is needed, we have to calculate the p-value. The p-value is 0.123, telling that there isn't statistically significance in the interaction term, so the interaction isn't needed in the model.
+
+By running an Anova test on the model, we can see that each of the main effects are significant and should be included in the model. There are also several interaction terms that should be included, which are:
+
+- HT:PU
+- HT:smokef
+- PU:smokef
+- smokef:socialf
+- HT:PU:smokef
+
+These signficanct interaction terms help us to make conclusions about correlations. We can find that three of the predictors - hypertension, proteinurea, and smoking status - are highly correlated with each other. We can also see that social class is only highly correlated with smoking status.
+
+
+# Question 16
+
+## Part E
+
+```{r}
+zipMod16e <- zeroinfl(ofp ~ hosp + numchron + gender + school + 
+                        privins + health_excellent + health_poor | 
+                        hosp + numchron + gender + school + 
+                        privins + health_excellent + health_poor,
+                      dist = "poisson",
+                      data = data16)
+
+lrtest(zipMod16, zipMod16e)
+```
+
+From the likelihood ratio test returning a statistically significant p-value, we can conclude that there's sufficient evidence that the explanatory variables do help to predict the number of physician office visits someone has.
+
+## Part F
+
+```{r}
+rootogram(zipMod16)
+rootogram(zipMod16e)
+```
+
+These rootograms show that both models predict relatively similarly, with the model using explanatory variables to estimate $\pi_i$ performing slighly better than the base zip model.
+

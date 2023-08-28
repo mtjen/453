@@ -1,0 +1,383 @@
+---
+title: "453 HW3"
+author: "Max Tjen"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+```{r, message = FALSE}
+library(GGally)
+library(nnet)
+library(car)
+library(VGAM)
+library(dplyr)
+library(tidyverse)
+```
+
+# Question 9
+
+## Part A
+
+In the context of DAVFs, independence would be when the rows and columns aren't related, so the odds for each classification (column) is the same for each symptom (row). Dependence would be when the rows and columns are related, so the classification odds shift depending on which symptom a patient is experiencing. To justify their classification system, the researchers would prefer symptoms and classification to be dependent. This is because there would then be an association and a clearer way to classify a patient based on their symptom.
+
+## Part B
+
+```{r}
+# create new dataframe of data
+table <- array (data = c(0, 1, 0, 0, 0, 0, 83,
+                         0, 8, 0, 1, 1, 0, 17,
+                         2, 1, 0, 0, 0, 0, 7,
+                         1, 2, 6, 2, 1, 0, 6, 
+                         10, 0, 8, 1, 0, 0, 6,
+                         19, 4, 2, 3, 0, 0, 1,
+                         5, 1, 0, 0, 0, 6, 0),
+                dim = c(7, 7), 
+                dimnames = list(Symptom = c("Hemmorage", "Intracranial hypertension",
+                                            "Focal neurologic deficit", "Seizures",
+                                            "Cardiac deficiency", "Myelopathy",
+                                            "Non-aggressive symptoms"),
+                                Classification = c("1", "2a", "2b", "2a and 2b",
+                                                   "3", "4", "5")))
+
+table
+
+chisq.test(table)
+```
+
+## Part C
+
+If the alternative scenario was true, the Pearson chi square results would be invalidated because of the test's assumptions. One of the assumptions wouldn't be met, which is that cells in the table are mutually exclusive. This means that an individual can't belong to more than one cell, which would occur in the case of the alternative scenario.
+
+
+# Question 12
+
+## Part A
+
+```{r, message=FALSE}
+data12 <- read_csv("/Users/mtjen/Desktop/453/hw3/cereal_dillons.csv")
+
+stand01 <- function(x) { (x - min(x))/(max(x) - min(x)) } 
+data12 <- data.frame(Shelf = data12$Shelf, 
+                     sugar = stand01(x = data12$sugar_g/data12$size_g), 
+                     fat = stand01(x = data12$fat_g/data12$size_g), 
+                     sodium = stand01(x = data12$sodium_mg/data12$size_g))
+
+data12 <- data12 |> mutate(Shelf = factor(Shelf))
+```
+
+## Part B
+
+```{r}
+# sugar
+boxplot(formula = sugar ~ Shelf, data = data12, ylab = "Sugar", 
+        xlab = "Shelf", pars = list(outpch=NA))
+stripchart(x = data12$sugar ~ data12$Shelf, lwd = 2, col = "red", 
+           vertical = TRUE, pch = 1, add = TRUE)
+
+# fat
+boxplot(formula = fat ~ Shelf, data = data12, ylab = "Fat", 
+        xlab = "Shelf", pars = list(outpch=NA))
+stripchart(x = data12$fat ~ data12$Shelf, lwd = 2, col = "red", 
+           vertical = TRUE, pch = 1, add = TRUE)
+
+# sodium
+boxplot(formula = sodium ~ Shelf, data = data12, ylab = "Sodium", 
+        xlab = "Shelf", pars = list(outpch=NA))
+stripchart(x = data12$sodium ~ data12$Shelf, lwd = 2, col = "red", 
+           vertical = TRUE, pch = 1, add = TRUE)
+
+# parallel coordinates plot
+ggparcoord(data = data12, columns = c(2:4), groupColumn = "Shelf", scale = "uniminmax")
+```
+
+In the first plot, we can see that shelf 2 has higher sugar content than the other shelves which are pretty similar. For fat content, the shelves are pretty similar with the median for shelf 1 being noticeably lower than the others. The last plot shows us that shelf 1 has higher sodium content than the other shelves, which are pretty similar to each other.
+
+## Part C
+
+It would be desirable to take ordinality into account when there is a clear order of consistency across the shelves. From the plots before, there isn't any clear order of the shelves in terms of healthiness or content, so ordinality shouldn't be taken into account.
+
+## Part D
+
+```{r, message=FALSE}
+mod12 <- multinom(Shelf ~ sugar + fat + sodium,
+                  data = data12, trace = FALSE)
+
+Anova(mod12)
+```
+
+By running a likelihood ratio test for each explanatory variable in our multinomial regression model, we can see that the sugar and sodium variables are statistically significant. They both have very small p-values while the p-value of fat isn't very small at 0.152. This leads us to believe that sugar and sodium content are associated with a cereal's shelf placement while fat isn't.
+
+## Part E
+
+```{r, message=FALSE}
+mod12e <- multinom(Shelf ~ sugar + fat + sodium + 
+                     sugar * fat + sugar * sodium + fat * sodium + 
+                     sugar * fat * sodium,
+                  data = data12, trace = FALSE)
+
+Anova(mod12e)
+```
+
+By adding interaction terms between each pair of explanatory variables as well as with all three, we can see that the likelihood ratio test doesn't return a statistically significant p-value for any of the new terms.
+
+## Part F
+
+```{r, message=FALSE}
+apple <- read_csv("/Users/mtjen/Desktop/453/hw3/cereal_dillons.csv")
+  
+# add row
+apple[nrow(apple) + 1,] = list(41, 1, "Apple Jacks", 28, 12, 0.5, 130)
+
+# retransform
+apple <- data.frame(Shelf = apple$Shelf, 
+                    sugar = stand01(x = apple$sugar_g/apple$size_g), 
+                    fat = stand01(x = apple$fat_g/apple$size_g), 
+                    sodium = stand01(x = apple$sodium_mg/apple$size_g)) |> 
+  mutate(Shelf = factor(Shelf))
+
+tail(apple)
+
+# create and predict test data
+testData <- tibble(sugar = apple[41,]$sugar, 
+                   fat = apple[41,]$fat, 
+                   sodium = apple[41,]$sodium)
+
+predict(mod12, newdata = testData, type = "probs")
+```
+
+The predicted shelf probabilities for Apple Jacks given the information provided is:
+
+- P(shelf = 1) = 0.053
+- P(shelf = 2) = 0.472
+- P(shelf = 3) = 0.200
+- P(shelf = 4) = 0.274
+
+## Part G
+
+```{r}
+meanFat <- mean(apple$fat)
+meanSodium <- mean(apple$sodium)
+
+plotData <- data.frame(sugar = seq(from = 0, to = 1, by = 0.01),
+                       fat = rep(meanFat, 101),
+                       sodium = rep(meanSodium, 101))
+
+predictedVals <- data.frame(predict(mod12, newdata = plotData, type = "probs"))
+colnames(predictedVals) = c("P(Shelf 1)", "P(Shelf 2)", "P(Shelf 3)", "P(Shelf 4)")
+
+comb <- cbind(plotData, predictedVals)
+
+# plot probabilities
+plot(comb$sugar, comb$`P(Shelf 1)`, 
+     type ="l",col="red", 
+     xlab = "Sugar Content", ylab = "P(Shelf)",
+     ylim = c(0, 1))
+lines(comb$sugar, comb$`P(Shelf 2)`, col="green")
+lines(comb$sugar, comb$`P(Shelf 3)`, col="blue")
+lines(comb$sugar, comb$`P(Shelf 4)`, col="orange")
+
+# add legend to plot
+legend(0.1, 0.99, 
+       legend = c("Shelf 1", "Shelf 2", "Shelf 3", "Shelf 4"), 
+       fill = c("red","green", "blue", "orange"))
+```
+
+With constant fat and sodium contents, we can see the impact of changing sugar content levels. If a cereal's sugar content is below 0.6, it has a relatively similar probability of being on shelf 3 or 4. A cereal with sugar content higher than 0.6 has the highest probability of being on shelf 2, particularly as the content level increases. Shelf 1 has a relatively low probability of being where the cereal is across all sugar content levels. 
+
+## Part H
+
+```{r}
+# odds ratios, confidence intervals
+#round(exp(0.15*2.693071), 2)
+#round(exp(0.15*(2.693071-12.216442)), 2)
+```
+
+???????
+
+
+# Question 16
+
+## Part A
+
+```{r, message=FALSE}
+data16 <- read_csv("/Users/mtjen/Desktop/453/hw3/ice_cream.csv")
+
+xtabs(count ~ fat + rating, 
+      data = data16)
+```
+
+## Part B
+
+```{r}
+# contingency table to dataframe
+freq16 <- data.frame(xtabs(count ~ fat + rating, 
+                           data = data16))
+
+# group by fat and create new variable
+freq16 <- freq16 |> 
+  group_by(fat) |>
+  mutate(observed = Freq / sum(Freq))
+
+xtabs(observed ~ fat + rating, 
+      data = freq16)
+
+ggplot(data = freq16, aes(x = fat, y = observed, 
+                          group = rating, color = rating)) +
+  geom_line() 
+```
+
+## Part C
+
+Pearson $\chi^2$ and likelihood ratio tests wouldn't be the ideal forms of analysis for independence on this data because they are focused on whether or not the values for each variable are independent from the other. In this instance for both fat content and rating, there is an order as to which values are higher than others, which isn't accounted for by the aforementioned tests.
+
+## Part D
+
+```{r}
+data16 <- data16 |>
+  mutate(rating = factor(rating))
+
+mod16 <- MASS::polr(rating ~ fat + I(fat^2), 
+                   data = data16, method = "logistic", weights = count)
+
+Anova(mod16)
+```
+
+The Anova test returns a very small and statistically significant p-value for the quadratic term, indicating that it would be helpful in prediction.
+
+## Part E
+
+```{r}
+data16 <- data16 |> 
+  mutate(rating = factor(rating,
+                         order = TRUE,
+                         levels = c("1", "2", "3",
+                                    "4", "5", "6",
+                                    "7", "8", "9")))
+
+# with proportional odds assumption
+mod16ePO <- vglm(rating ~ fat + I(fat^2),
+                 family = cumulative(parallel = TRUE),
+                 data = data16[data16$count != 0,],
+                 weights = count)
+
+# with proportional odds assumption
+mod16eNPO <- vglm(rating ~ fat + I(fat^2), 
+                  family = cumulative(parallel = FALSE),
+                  data = data16[data16$count != 0,],
+                  weights = count)
+
+lr <- deviance(mod16ePO) - deviance(mod16eNPO)
+dfs <- mod16ePO@df.residual - mod16eNPO@df.residual
+1 - pchisq(q = lr, df = dfs)
+```
+
+The p-value from the likelihood ratio test is statistically insignificant at 0.500, indicating that there isn't enough evidence that the proportional odds assumption is violated.
+
+## Part F
+
+```{r}
+c.value <- c(sd(data16$fat), 1)
+round(1/exp(c.value*(-mod16$coefficients)), 2)
+
+c.value <- c(1, sd(data16$fat))
+round(1/exp(c.value*(-mod16$coefficients)), 2)
+```
+
+With a one standard deviation change in fat content, it appears that there is a very high likelihood that the ice cream rating will increase.
+
+```{r}
+# create and predict test data
+testData <- tibble(fat = seq(from = 0, to = 0.3, by = 0.01))
+
+predictions <- as.data.frame(predict(mod16, newdata = testData, type = "probs"))
+colnames(predictions) <- c("1", "2", "3",
+                           "4", "5", "6",
+                           "7", "8", "9")
+
+predictions$fat <- seq(from = 0, to = 0.3, by = 0.01)
+
+# plot probabilities
+plot(predictions$fat, predictions$`1`, 
+     type ="l",col="red", 
+     xlab = "Fat Content", ylab = "P(Rating)",
+     xlim = c(0, 0.4),ylim = c(0, 0.4))
+lines(predictions$fat, predictions$`2`, col="green")
+lines(predictions$fat, predictions$`3`, col="purple")
+lines(predictions$fat, predictions$`4`, col="pink")
+lines(predictions$fat, predictions$`5`, col="orange")
+lines(predictions$fat, predictions$`6`, col="lightblue")
+lines(predictions$fat, predictions$`7`, col="blue")
+lines(predictions$fat, predictions$`8`, col="maroon")
+lines(predictions$fat, predictions$`9`, col="black")
+
+# add legend to plot
+legend(0.35, 0.35, 
+       legend = c("1", "2", "3",
+                  "4", "5", "6",
+                  "7", "8", "9"), 
+       fill = c("red","green", "purple",
+                "pink","orange", "lightblue",
+                "blue","maroon", "black"))
+```
+
+From the rating probabilities, it looks like the higher rating's ice cream probabilities are highest between 0.1 and 0.2. Conversely, lower ratings have higher probabilities when fat content is either low or high. As such, we would recommend an ice cream fat content in the middle, particularly between of 0.1 and 0.2.
+
+
+# Question 21
+
+```{r}
+data(pneumo)
+
+normalCounts <- data.frame(exposure = pneumo$exposure.time, 
+                           count = pneumo$normal, severity = "normal")
+
+mildCounts <- data.frame(exposure = pneumo$exposure.time, 
+                           count = pneumo$mild, severity = "mild")
+
+severeCounts <- data.frame(exposure = pneumo$exposure.time, 
+                           count = pneumo$severe, severity = "severe")
+
+data21 <- rbind(normalCounts, mildCounts, severeCounts) |>
+  mutate(exposure = as.numeric(exposure),
+         count = as.numeric(count),
+         severity = factor(severity, order = TRUE,
+                           levels = c("normal", "mild", "severe")))
+
+mod21 <- MASS::polr(severity ~ exposure, 
+                    data = data21, weights = count)
+
+Anova(mod21)
+
+# create and predict test data
+testData <- tibble(exposure = seq(from = 0, to = 100, by = 1))
+
+predictions <- as.data.frame(predict(mod21, newdata = testData, type = "probs"))
+colnames(predictions) <- c("Normal", "Mild", "Severe")
+predictions$time <- seq(from = 0, to = 100, by = 1)
+
+# plot probabilities
+plot(predictions$time, predictions$Normal, 
+     type ="l",col="red", 
+     xlab = "Exposure Time", ylab = "P(Severity)",
+     ylim = c(0, 1))
+lines(predictions$time, predictions$Mild, col="green")
+lines(predictions$time, predictions$Severe, col="blue")
+
+# add legend to plot
+legend(58, 0.6, 
+       legend = c("Normal", "Mild", "Severe"), 
+       fill = c("red","green", "blue"))
+```
+
+From the Anova test and the plot of probabilities, we can see that severity is quite dependent on exposure time. Normal and severe severity probabilities are almost inverse of each other, with normal being the most probable outcome from 0-47 and then severe being the most probable from 48-100. Mild has a relatively low probability across exposure times. 
+
+```{r}
+predictions |> filter(time %in% c(5, 10, 15, 20, 25))
+```
+
+Here are the predicted severity probabilities for exposure times of 5, 10, 15, 20, and 25 years.
